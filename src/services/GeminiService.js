@@ -2,7 +2,7 @@ import { useState } from 'react';
 
 // --- GLOBAL CONFIGURATION ---
 // *** ¡CRÍTICO! REEMPLAZA EL TEXTO ENTRE COMILLAS CON TU CLAVE REAL DE GEMINI ***
-const API_KEY = "AIzaSyAB5RqM7NmnSYvTnnSEnr5BmBltBtZrHl4"; 
+const API_KEY = "AIzaSyD0HcRvhbf1pLc5IudsVOInaYL3jCbFpUw"; 
 const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025";
 
 // JSON Schema for structured test questions

@@ -1,19 +1,17 @@
-import React from 'react';
-import { StatusBar } from 'react-native';
+import { LogBox } from 'react-native';
+import AppNavigator from './src/navigation/AppNavigator';
+import { FirebaseProvider } from './src/services/FirebaseContext';
+// DEBES ELIMINAR LA IMPORTACIÓN DE ThemeProvider SI ESTABA AQUÍ
 
-// Importamos el proveedor de Firebase (FirebaseContext.js)
-import { FirebaseProvider } from './src/services/FirebaseContext'; 
+// Omitir warnings
+LogBox.ignoreAllLogs();
 
-// Importamos el NUEVO componente de navegación
-import AppNavigator from './src/navigation/AppNavigator'; 
-
-// --- Componente Raíz ---
 export default function App() {
-    return (
-        // Envolvemos toda la app en el FirebaseProvider para que todas las pantallas accedan a la BD
-        <FirebaseProvider>
-            <StatusBar barStyle="dark-content" />
-            <AppNavigator />
-        </FirebaseProvider>
-    );
+  
+  return (
+    // Asegúrate de que solo FirebaseProvider envuelve el AppNavigator
+    <FirebaseProvider>
+        <AppNavigator />
+    </FirebaseProvider>
+  );
 }

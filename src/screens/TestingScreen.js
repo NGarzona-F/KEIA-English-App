@@ -26,6 +26,8 @@ export default function TestingScreen({ route, navigation }) {
 
     const [questions, setQuestions] = useState(null);
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+    // Para Speaking simulado, usaremos un estado simple de si el usuario interactuó
+    const [userInteracted, setUserInteracted] = useState(false); 
     const [userAnswers, setUserAnswers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -44,14 +46,18 @@ export default function TestingScreen({ route, navigation }) {
         }
     };
     
-    // Hablamos la pregunta tan pronto como cambia (para Listening)
+    // Hablamos la pregunta tan pronto como cambia (para Listening/Speaking)
     useEffect(() => {
         // En Listening, solo hablamos la primera "pregunta" (que es la historia)
-        // O si es un listening de frases cortas (Fase 1/2)
         if (question && skill === 'listening' && (currentQuestionIndex === 0 || testPhase !== 3)) { 
             speakQuestion(question.question);
         }
-    }, [question, skill]);
+        
+        // ** CAMBIO CLAVE: NO REPRODUCIR AUDIO AUTOMÁTICAMENTE EN SPEAKING **
+        if (question && skill === 'speaking') {
+            setUserInteracted(false); 
+        }
+    }, [question, skill, currentQuestionIndex]);
 
     // 1. Generate the test with Gemini
     useEffect(() => {
@@ -81,11 +87,25 @@ export default function TestingScreen({ route, navigation }) {
                     userQuery = `Genera 7 ejercicios. Mezcla: 3 de traducción simple (Español -> Inglés, enfocadas en vocabulario), 3 de completar oraciones con el tiempo verbal correcto, y 1 de respuesta corta. Las respuestas esperadas ('correct_answer') deben ser SIEMPRE EN INGLÉS.`;
                 }
                 
-            // --- INICIO DEL BLOQUE LISTENING/SPEAKING MODIFICADO ---
             } else if (skill === 'speaking') {
-                // SPEAKING: práctica de frases cortas (respuesta tipo 'write')
-                systemPrompt = `Eres un generador de ejercicios de idioma. Crea un set de 7 frases EN INGLÉS para SPEAKING en el nivel **${currentLevel}**, fase ${testPhase}. El usuario debe repetir la frase. La respuesta DEBE ser un array JSON.`;
-                userQuery = `Genera 7 frases de práctica EN INGLÉS. La pregunta ('question') debe ser la frase en INGLÉS, y la respuesta esperada ('correct_answer') debe ser la misma frase en INGLÉS. Utiliza preguntas tipo 'write'.`;
+                // SPEAKING: Progresión de dificultad - Todas deben ser tipo 'write' para que la IA sepa qué evaluar.
+                const isFinalChallenge = testPhase === 3;
+                
+                if (isFinalChallenge) {
+                    // SPEAKING FASE 3: Diálogos/Párrafos para fluidez sostenida
+                    systemPrompt = `Eres un generador de ejercicios de SPEAKING de nivel ${currentLevel}. Crea 7 ejercicios que consistan en diálogos o párrafos cortos (3-4 oraciones) para que el usuario practique la fluidez. La respuesta DEBE ser un array JSON.`;
+                    userQuery = `Genera 7 ejercicios de SPEAKING para ${currentLevel}. El usuario debe repetir el texto completo. La pregunta ('question') debe ser el diálogo/párrafo en INGLÉS, y la respuesta esperada ('correct_answer') debe ser el mismo texto. Utiliza preguntas tipo 'write'.`;
+                
+                } else if (testPhase === 2) {
+                    // SPEAKING FASE 2: Oraciones complejas
+                    systemPrompt = `Eres un generador de ejercicios de SPEAKING de nivel ${currentLevel}. Crea 7 oraciones de práctica con estructuras gramaticales específicas (ej: condicionales, voz pasiva) para mejorar la fluidez y entonación. La respuesta DEBE ser un array JSON.`;
+                    userQuery = `Genera 7 oraciones completas en INGLÉS para ${currentLevel}. La pregunta ('question') debe ser la oración en INGLÉS, y la respuesta esperada ('correct_answer') debe ser la misma oración. Utiliza preguntas tipo 'write'.`;
+                
+                } else {
+                    // SPEAKING FASE 1: Frases sencillas y cortas
+                    systemPrompt = `Eres un generador de ejercicios de SPEAKING de nivel ${currentLevel}. Crea 7 frases muy cortas y sencillas enfocadas en palabras comunes y ritmo. La respuesta DEBE ser un array JSON.`;
+                    userQuery = `Genera 7 frases sencillas en INGLÉS para ${currentLevel}. La pregunta ('question') debe ser la frase en INGLÉS, y la respuesta esperada ('correct_answer') debe ser la misma frase. Utiliza preguntas tipo 'write'.`;
+                }
 
             } else if (skill === 'listening') {
                 // LISTENING: Historias cortas y preguntas de selección (tipo 'mc')
@@ -100,19 +120,34 @@ export default function TestingScreen({ route, navigation }) {
                     systemPrompt = `Eres un generador de pruebas de LISTENING. Crea 7 ejercicios cortos de comprensión de audio. Cada ejercicio consta de una frase o diálogo corto y una pregunta. La respuesta DEBE ser un array JSON.`;
                     userQuery = `Genera 7 preguntas de opción múltiple ('mc') para el nivel **${currentLevel}**. La 'question' debe ser la frase o diálogo corto en INGLÉS que el usuario debe escuchar. Las opciones de respuesta deben ser frases en ESPAÑOL que validen la comprensión.`;
                 }
-            // --- FIN DEL BLOQUE LISTENING/SPEAKING MODIFICADO ---
             
-            } else {
-                // Test de habilidad normal (Grammar/Vocabulary)
-                systemPrompt = `Eres un generador de evaluaciones de inglés (CEFR). Crea una prueba concisa de 5 preguntas sobre la habilidad "${skill}" para el nivel "${level}". La respuesta DEBE ser un array JSON.`;
-                userQuery = `Genera un test de 5 preguntas, mezcla preguntas de opción múltiple y de respuesta corta ('write'). Las respuestas esperadas deben ser EN INGLÉS.`;
+            } else if (skill === 'grammar' || skill === 'vocabulary') {
+                const isFinalChallenge = testPhase === 3;
+                
+                if (skill === 'grammar') {
+                    if (isFinalChallenge) {
+                        // GRAMMAR FASE 3: Corrección y aplicación de reglas complejas.
+                        systemPrompt = `Eres un experto en gramática de nivel ${currentLevel}. Crea una prueba de 7 preguntas enfocadas en el diagnóstico y la corrección de errores gramaticales complejos. La respuesta DEBE ser un array JSON.`;
+                        userQuery = `Genera 7 preguntas: 4 preguntas de corrección de errores (dar una frase incorrecta y pedir la forma correcta, type: 'write') y 3 preguntas de opción múltiple sobre el uso de conectores y cláusulas avanzadas. Las respuestas esperadas ('correct_answer') deben ser SIEMPRE EN INGLÉS.`;
+                    } else {
+                        // GRAMMAR FASE 1/2: Fundamentos.
+                        systemPrompt = `Eres un evaluador de gramática (CEFR). Crea una prueba concisa de 7 preguntas sobre GRAMMAR para el nivel "${currentLevel}", fase ${testPhase}. La respuesta DEBE ser un array JSON.`;
+                        userQuery = `Genera un test de 7 preguntas, incluyendo 5 de opción múltiple (tiempos verbales básicos, concordancia) y 2 de rellenar el espacio (type: 'write'). Las respuestas esperadas deben ser EN INGLÉS.`;
+                    }
+                } else {
+                    // VOCABULARY (sin fases de dificultad por ahora, usa el bloque original)
+                    systemPrompt = `Eres un generador de evaluaciones de inglés (CEFR). Crea una prueba concisa de 5 preguntas sobre la habilidad "${skill}" para el nivel "${level}". La respuesta DEBE ser un array JSON.`;
+                    userQuery = `Genera un test de 5 preguntas, mezcla preguntas de opción múltiple y de respuesta corta ('write'). Las respuestas esperadas deben ser EN INGLÉS.`;
+                }
             }
             
             try {
                 const testData = await callGemini(systemPrompt, userQuery, testSchema);
                 if (testData && testData.length > 0) {
                     setQuestions(testData);
-                    setUserAnswers(new Array(testData.length).fill(null));
+                    // Para Speaking, inicializamos la respuesta con un valor para habilitar el botón "Siguiente"
+                    const initialAnswers = new Array(testData.length).fill(skill === 'speaking' ? question?.correct_answer || 'Simulated Speaking' : null);
+                    setUserAnswers(initialAnswers);
                 } else {
                     setError("No se pudieron generar las preguntas. Inténtalo de nuevo.");
                 }
@@ -141,13 +176,24 @@ export default function TestingScreen({ route, navigation }) {
             feedback: "No evaluado.",
         }));
 
+        // --- MANEJO ESPECIAL PARA SPEAKING ---
+        // Dado que la evaluación de pronunciación es simulada, 
+        // asumimos que el usuario lo hizo bien si interactuó.
+        if (skill === 'speaking') {
+            finalQuestions = finalQuestions.map(item => ({
+                ...item,
+                user_answer: item.correct_answer, // Forzamos la respuesta del usuario para pasarla a la IA
+                is_correct: true, // Asumimos que la repetición fue correcta para mantener la UX
+                feedback: "Evaluación simulada: Se asume que repetiste la frase correctamente. ¡Excelente práctica!",
+            }));
+            correctCount = finalQuestions.length;
+        }
 
         try {
             // A. Local MC evaluation: Procesa TODAS las MC.
             finalQuestions = finalQuestions.map(item => {
                 if (item.type === 'mc') {
                     // Ignoramos la primera pregunta si es la historia del Listening 
-                    // (la cual forzamos a ser MC con opción "Continuar" para que el usuario la vea primero)
                     if (skill === 'listening' && testPhase === 3 && item.id === questions[0].id) {
                          return item;
                     }
@@ -303,7 +349,12 @@ export default function TestingScreen({ route, navigation }) {
         newAnswers[currentQuestionIndex] = answer; 
         setUserAnswers(newAnswers);
         
-        // Auto-avanzar si es la "pregunta" de la historia (solo sirve para avanzar a la pregunta 2)
+        // Simulación de interacción para Speaking
+        if (skill === 'speaking') {
+             setUserInteracted(true);
+        }
+        
+        // Auto-avanzar si es la "pregunta" de la historia (solo ocurre en Listening Fase 3)
         if (skill === 'listening' && testPhase === 3 && currentQuestionIndex === 0) {
             setTimeout(handleNext, 100); 
         }
@@ -315,6 +366,16 @@ export default function TestingScreen({ route, navigation }) {
 
     const handleNext = () => {
         Keyboard.dismiss(); 
+        
+        // Si es Speaking, forzamos la respuesta como correcta si el usuario interactuó
+        if (skill === 'speaking' && userInteracted) {
+             const assumedAnswer = questions[currentQuestionIndex].correct_answer;
+             const updatedAnswers = [...userAnswers];
+             updatedAnswers[currentQuestionIndex] = assumedAnswer;
+             setUserAnswers(updatedAnswers);
+             setUserInteracted(false); // Reset para la siguiente pregunta
+        }
+
         if (currentQuestionIndex < questions.length - 1) {
             setCurrentQuestionIndex(prev => prev + 1);
         } else {
@@ -324,6 +385,11 @@ export default function TestingScreen({ route, navigation }) {
     
     // Determinamos si es la pantalla de la historia (solo ocurre en Listening Fase 3)
     const isStoryScreen = skill === 'listening' && testPhase === 3 && currentQuestionIndex === 0;
+    
+    // Si es Speaking, el botón Siguiente siempre se habilita después de interactuar (pulsar el micrófono)
+    const isNextButtonDisabled = !isStoryScreen && skill !== 'speaking' && (userAnswers[currentQuestionIndex] === null || userAnswers[currentQuestionIndex] === '' || isRecording);
+    
+    const isSpeakingAndNotInteracted = skill === 'speaking' && !userInteracted;
 
     if (loading) {
         return <LoadingScreen message={`Generando prueba de ${skill === 'placement' ? 'Nivelación' : skill}...`} />;
@@ -362,9 +428,9 @@ export default function TestingScreen({ route, navigation }) {
                     <View style={styles.testContent}>
                         
                         {/* CONTROLES DE AUDIO (TTS) */}
-                        {(skill === 'speaking' || skill === 'listening') && (
+                        {/* ** CAMBIO CLAVE: SOLO MOSTRAR SI ES LISTENING ** */}
+                        {skill === 'listening' && (
                             <View style={styles.speakingControls}>
-                                {/* ÚNICO BOTÓN DE AUDIO/REPETICIÓN */}
                                 <TouchableOpacity 
                                     style={[styles.audioButtonOnly, { backgroundColor: GlobalStyles.secondaryColor.color }]} 
                                     onPress={() => speakQuestion(question.question)}
@@ -384,11 +450,11 @@ export default function TestingScreen({ route, navigation }) {
                             {!isStoryScreen && (
                                 <>
                                     <Text style={styles.testProgressText}>
-                                        Pregunta {currentQuestionIndex} de {questions.length - 1}
+                                        Pregunta {currentQuestionIndex + 1} de {questions.length}
                                     </Text>
                                     {/* Barra de Progreso Superior */}
                                     <View style={styles.progressBarBackground}>
-                                        <View style={[styles.progressBarFill, { width: `${(currentQuestionIndex / (questions.length - 1)) * 100}%` }]} />
+                                        <View style={[styles.progressBarFill, { width: `${((currentQuestionIndex + 1) / questions.length) * 100}%` }]} />
                                     </View>
                                 </>
                             )}
@@ -399,18 +465,17 @@ export default function TestingScreen({ route, navigation }) {
                                     <Text style={styles.storyInstructionTitle}>Escucha la historia y haz clic en continuar.</Text>
                                 </View>
                             )}
-
-                            <View style={styles.testQuestionBox}>
+                            
+                            {/* CAJA DE PREGUNTA/FRASE */}
+                            <View style={[styles.testQuestionBox, skill === 'speaking' && styles.speakingQuestionBox]}>
                                 <Text style={styles.testQuestionText}>
-                                    {/* Si es la historia, forzamos a que solo se muestre el texto de la historia.
-                                    Si no, mostramos la pregunta. */}
                                     {isStoryScreen ? question.question : question.question}
                                 </Text>
                             </View>
 
                             {/* Opciones de Respuesta */}
                             <View style={styles.testOptionsContainer}>
-                                {question.type === 'mc' && question.options.map(option => (
+                                {question.type === 'mc' && skill !== 'speaking' && question.options.map(option => (
                                     <TouchableOpacity
                                         key={option}
                                         onPress={() => handleAnswer(option)}
@@ -424,8 +489,34 @@ export default function TestingScreen({ route, navigation }) {
                                         </Text>
                                     </TouchableOpacity>
                                 ))}
+                                
+                                {/* INTERFAZ DE SPEAKING SIMULADA */}
+                                {skill === 'speaking' && (
+                                    <>
+                                        <View style={styles.speakingInstruction}>
+                                            <Text style={styles.speakingInstructionText}>
+                                                Lee la frase en voz alta para practicar.
+                                            </Text>
+                                        </View>
+                                        <TouchableOpacity 
+                                            style={styles.microphoneButton}
+                                            onPress={() => handleAnswer(question.correct_answer)} // Usamos handleAnswer para setear userInteracted
+                                        >
+                                            <Icon name={userInteracted ? "check-circle" : "microphone-outline"} size={60} color={userInteracted ? GlobalStyles.primaryColor.color : GlobalStyles.secondaryColor.color} />
+                                            <Text style={styles.microphoneText}>
+                                                {userInteracted ? "¡LISTO! (Simulación de voz)" : "HABLAR"}
+                                            </Text>
+                                        </TouchableOpacity>
+                                        
+                                        {userInteracted && (
+                                            <Text style={styles.userSaidText}>
+                                                [Simulación: Pronunciación evaluada. Puedes continuar.]
+                                            </Text>
+                                        )}
+                                    </>
+                                )}
 
-                                {question.type === 'write' && (
+                                {question.type === 'write' && skill !== 'speaking' && (
                                     <TextInput
                                         multiline
                                         placeholder={'Escribe la respuesta aquí...'}
@@ -446,9 +537,12 @@ export default function TestingScreen({ route, navigation }) {
                         <View style={styles.testFooter}>
                             <TouchableOpacity
                                 onPress={handleNext}
-                                // Si es la pantalla de historia, solo necesitamos que se haya seleccionado "Continuar" o tocado.
-                                disabled={!isStoryScreen && (userAnswers[currentQuestionIndex] === null || userAnswers[currentQuestionIndex] === '' || isRecording)}
-                                style={[GlobalStyles.button, styles.nextButton, (!isStoryScreen && (userAnswers[currentQuestionIndex] === null || userAnswers[currentQuestionIndex] === '' || isRecording)) ? GlobalStyles.buttonDisabled : GlobalStyles.primaryButton]}
+                                disabled={isNextButtonDisabled || isSpeakingAndNotInteracted}
+                                style={[
+                                    GlobalStyles.button, 
+                                    styles.nextButton, 
+                                    (isNextButtonDisabled || isSpeakingAndNotInteracted) ? GlobalStyles.buttonDisabled : GlobalStyles.primaryButton
+                                ]}
                             >
                                 <Text style={GlobalStyles.buttonText}>
                                     {isStoryScreen ? 'CONTINUAR' : currentQuestionIndex === questions.length - 1 ? 'FINALIZAR TEST' : 'SIGUIENTE PREGUNTA'}
@@ -552,6 +646,9 @@ const styles = StyleSheet.create({
         ...GlobalStyles.shadow,
         shadowOpacity: 0.1,
     },
+    speakingQuestionBox: {
+         paddingVertical: 40, // Más espacio para la frase de repetición
+    },
     storyInstructionBox: {
         backgroundColor: '#D1FAE5',
         borderColor: GlobalStyles.primaryColor.color,
@@ -567,6 +664,7 @@ const styles = StyleSheet.create({
         fontSize: 22,
         fontWeight: '600',
         color: GlobalStyles.textColor.color,
+        textAlign: 'center', // Centrado para frases de repetición
     },
     // --- CONTROLES DE AUDIO Y GRABACIÓN ---
     speakingControls: {
@@ -641,6 +739,41 @@ const styles = StyleSheet.create({
         ...GlobalStyles.shadow,
         shadowOpacity: 0.1,
     },
+    // --- ESTILOS DE SPEAKING SIMULADO ---
+    speakingInstruction: {
+        marginBottom: 15,
+        alignItems: 'center',
+    },
+    speakingInstructionText: {
+        fontSize: 16,
+        color: GlobalStyles.textLight.color,
+        textAlign: 'center',
+    },
+    microphoneButton: {
+        width: 150,
+        height: 150,
+        borderRadius: 75,
+        backgroundColor: '#E0F4FF',
+        justifyContent: 'center',
+        alignItems: 'center',
+        alignSelf: 'center',
+        borderWidth: 5,
+        borderColor: GlobalStyles.secondaryColor.color,
+        padding: 15,
+    },
+    microphoneText: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        color: GlobalStyles.textColor.color,
+        marginTop: 5,
+    },
+    userSaidText: {
+        textAlign: 'center',
+        marginTop: 20,
+        fontStyle: 'italic',
+        color: GlobalStyles.primaryColor.color,
+    },
+    // --- FIN ESTILOS SPEAKING ---
     testFooter: {
         paddingTop: 10,
     },

@@ -5,7 +5,7 @@ import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 
 // Importamos Hooks del contexto
 import { useFirebase, useUserData } from '../services/FirebaseContext'; 
-import { GlobalStyles } from '../styles/GlobalStyles'; 
+import { GlobalStyles } from '../styles/GlobalStyles'; // Importación estática original
 
 // Importamos todas las pantallas
 import AuthScreen from '../screens/AuthScreen';
@@ -13,19 +13,17 @@ import HomeScreen from '../screens/HomeScreen';
 import LevelSelectScreen from '../screens/LevelSelectScreen';
 import TestingScreen from '../screens/TestingScreen';
 import TestResultsScreen from '../screens/TestResultsScreen';
-
-// --- NUEVAS PANTALLAS (Asegúrate de que existan en la carpeta screens) ---
-import SkillTestSelectScreen from '../screens/SkillTestSelectScreen'; // <--- SkillDetailScreen renombrado
+import SkillTestSelectScreen from '../screens/SkillTestSelectScreen'; 
 import VocabularyLevelSelectScreen from '../screens/VocabularyLevelSelectScreen';
 import VocabularyCategorySelectScreen from '../screens/VocabularyCategorySelectScreen';
 import VocabularyDetailScreen from '../screens/VocabularyDetailScreen';
-// --- FIN NUEVAS PANTALLAS ---
+import AboutScreen from '../screens/AboutScreen'; 
 
 const Stack = createNativeStackNavigator();
 
 const LoadingScreen = () => (
     <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#3b82f6" />
+        <ActivityIndicator size="large" color={GlobalStyles.secondaryColor.color} />
         <Text style={styles.loadingText}>Cargando aplicación y autenticación...</Text>
     </View>
 );
@@ -41,21 +39,22 @@ export default function AppNavigator() {
     }
 
     // 2. Determinar la ruta inicial.
-    let initialRouteName = 'Auth'; 
-
-    if (userId) {
-        // Si el usuario está autenticado, pero los datos (perfil/nivel) no han cargado, mostramos carga.
-        if (isLoadingData) {
-            return <LoadingScreen />;
-        }
-        
-        // Si ya cargamos los datos del usuario:
-        initialRouteName = (userData && userData.level) 
-            ? 'Home'       // Si tiene nivel, va al Dashboard
-            : 'LevelSelect'; // Si no tiene nivel, va a selección de nivel
+    let initialRouteName = '';
+    
+    // --- LÓGICA DE REDIRECCIÓN ESTABLE ---
+    if (!userId) {
+        // CASO 1: No hay usuario autenticado -> Ir a Auth
+        initialRouteName = 'Auth';
+    } else if (isLoadingData) {
+        // CASO 2: Usuario existe, pero los datos aún están cargando -> Mostrar Carga
+        return <LoadingScreen />;
     } else {
-        initialRouteName = 'Auth'; // Si no tiene userId, va a Login/Registro.
+        // CASO 3: Usuario existe y la data cargó -> Determinar Home o LevelSelect
+        initialRouteName = (userData?.level) 
+            ? 'Home'      
+            : 'LevelSelect'; 
     }
+    // ----------------------------------------
     
     return (
         <NavigationContainer>
@@ -74,19 +73,17 @@ export default function AppNavigator() {
 
                 {/* Flujo Principal de la App */}
                 <Stack.Screen name="Home" component={HomeScreen} />
-                
-                {/* Pantalla de selección de tests (ex-SkillDetailScreen) */}
                 <Stack.Screen name="SkillDetails" component={SkillTestSelectScreen} /> 
-                
-                {/* Rutas de Testing */}
                 <Stack.Screen name="Testing" component={TestingScreen} />
                 <Stack.Screen name="Results" component={TestResultsScreen} />
-
-                {/* --- NUEVAS RUTAS DE VOCABULARIO --- */}
+                
+                {/* RUTAS DE VOCABULARIO */}
                 <Stack.Screen name="VocabLevels" component={VocabularyLevelSelectScreen} />
                 <Stack.Screen name="VocabCategories" component={VocabularyCategorySelectScreen} />
                 <Stack.Screen name="VocabDetail" component={VocabularyDetailScreen} />
-                {/* --- FIN NUEVAS RUTAS DE VOCABULARIO --- */}
+                
+                {/* RUTA DE CRÉDITOS */}
+                <Stack.Screen name="About" component={AboutScreen} />
             </Stack.Navigator>
         </NavigationContainer>
     );
@@ -97,11 +94,11 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#f9fafb',
+        backgroundColor: GlobalStyles.backgroundLight.color,
     },
     loadingText: {
         marginTop: 10,
         fontSize: 16,
-        color: '#4b5563',
-    }
+        color: GlobalStyles.textColor.color,
+    },
 });

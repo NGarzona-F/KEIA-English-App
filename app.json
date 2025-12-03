@@ -13,17 +13,30 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSSpeechRecognitionUsageDescription": "¿Permitir que la app use reconocimiento de voz para evaluar tu pronunciación?",
+        "NSMicrophoneUsageDescription": "¿Permitir que la app acceda al micrófono para grabar tu voz y practicar la pronunciación?"
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "RECORD_AUDIO"
+      ],
+      "package": "com.nestgarz.KeIA"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "b507acd1-8931-48b6-b630-b2d5ee307074"
+      }
     }
   }
 }

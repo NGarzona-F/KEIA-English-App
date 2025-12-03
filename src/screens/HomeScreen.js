@@ -1,5 +1,5 @@
 // HomeScreen.js — Estilo "Duolingo" (lista de tarjetas, avatar, barra de XP)
-// VERSION: coherence removido
+// VERSION: coherence removed, fixes & safer GlobalStyles usage
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
@@ -11,20 +11,18 @@ import { GlobalStyles } from '../styles/GlobalStyles';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const screenWidth = Dimensions.get('window').width;
-const CARD_HORIZONTAL_PADDING = 18; // coincide con container padding
-const CARD_WIDTH = screenWidth - (CARD_HORIZONTAL_PADDING * 2);
+const CARD_HORIZONTAL_PADDING = 18;
 
 const LEVEL_LABELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 const XP_PER_LEVEL = 100;
 
 export default function HomeScreen({ navigation }) {
-  // Hooks (always same order)
   const { auth } = useFirebase();
   const { userData, isLoadingData } = useUserData();
   const insets = useSafeAreaInsets();
   const [isMenuVisible, setIsMenuVisible] = useState(false);
 
-  // Icons & colors (coherence removed)
+  // Icons & colors (use safe optional chaining)
   const skillIcons = {
     speaking: 'account-voice',
     writing: 'pencil',
@@ -35,54 +33,57 @@ export default function HomeScreen({ navigation }) {
   };
 
   const skillColors = {
-    speaking: '#FF4B4B',
-    writing: '#1CB0F6',
-    vocabulary: '#FFC800',
-    grammar: '#9B4DFF',
+    speaking: GlobalStyles?.errorColor?.color || '#FF4B4B',
+    writing: GlobalStyles?.secondaryColor?.color || '#1CB0F6',
+    vocabulary: GlobalStyles?.accentColor?.color || '#FFC800',
+    grammar: GlobalStyles?.tertiaryColor?.color || '#9B4DFF',
     listening: '#FF7F00',
-    levelTest: GlobalStyles.primaryColor?.color || '#1CB0F6',
+    levelTest: GlobalStyles?.primaryColor?.color || '#1CB0F6',
   };
 
-  // Menu actions
+  // Logout
   const handleLogout = async () => {
-    setIsMenuVisible(false);
     try {
       await auth.signOut();
     } catch (error) {
-      console.error('Logout error:', error);
-      alert('No se pudo cerrar sesión. Intenta de nuevo.');
+      console.error('Logout Error:', error);
+      alert('Hubo un error al cerrar sesión.');
     }
+    setIsMenuVisible(false);
+  };
+
+  const handleNavigateToAbout = () => {
+    setIsMenuVisible(false);
+    navigation.navigate('About');
   };
 
   const handleSettings = () => {
-    setIsMenuVisible(false);
-    alert('Configuración aún no implementada.');
+    handleNavigateToAbout();
   };
 
-  // --- MODIFICACIÓN DE NAVEGACIÓN ---
+  // Navigate to skill screen (special cases for vocabulary and levelTest)
   const handleNavigateToSkill = (skillName, currentLevel) => {
     setIsMenuVisible(false);
-    
     if (skillName === 'vocabulary') {
-        // Nueva ruta para la selección de niveles de vocabulario
-        navigation.navigate('VocabLevels'); 
+      navigation.navigate('VocabLevels');
+    } else if (skillName === 'levelTest' || skillName === 'leveltest') {
+      navigation.navigate('Testing', { skill: 'placement', level: currentLevel });
     } else {
-        // Las demás habilidades van a la selección de tests (SkillTestSelectScreen)
-        navigation.navigate('SkillDetails', { skill: skillName, userLevel: currentLevel });
+      navigation.navigate('SkillDetails', { skill: skillName, userLevel: currentLevel });
     }
   };
 
-  // Loading state
+  // Loading
   if (isLoadingData) {
     return (
-      <View style={[GlobalStyles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color={GlobalStyles.primaryColor.color} />
-        <Text style={{ marginTop: 15, color: GlobalStyles.textLight.color }}>Cargando tu perfil...</Text>
+      <View style={[GlobalStyles?.container || styles.fallbackContainer, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={GlobalStyles?.primaryColor?.color || '#1CB0F6'} />
+        <Text style={{ marginTop: 15, color: GlobalStyles?.textLight?.color || '#666' }}>Cargando tu perfil...</Text>
       </View>
     );
   }
 
-  // User data (fallbacks)
+  // User data (safe defaults)
   const {
     username = 'Usuario',
     level = 1,
@@ -93,7 +94,7 @@ export default function HomeScreen({ navigation }) {
 
   const displayName = username && username.length ? username : 'Usuario';
 
-  // CEFR mapping (assumes level is numeric 1..6 mapping to LEVEL_LABELS)
+  // CEFR mapping & XP logic
   const levelNumber = Math.max(1, Math.floor(Number(level) || 1));
   const currentIndex = Math.min(LEVEL_LABELS.length - 1, levelNumber - 1);
   const currentLabel = LEVEL_LABELS[currentIndex] || `Nivel ${levelNumber}`;
@@ -101,23 +102,21 @@ export default function HomeScreen({ navigation }) {
   const nextLabel = LEVEL_LABELS[nextIndex];
   const isMaxLevel = currentIndex >= LEVEL_LABELS.length - 1;
 
-  // XP progress inside current level (simple modulo approach)
-  const xpWithinLevel = xp % XP_PER_LEVEL;
+  const xpWithinLevel = (Number.isFinite(xp) ? xp : 0) % XP_PER_LEVEL;
   const xpToNextLevel = isMaxLevel ? 0 : (XP_PER_LEVEL - xpWithinLevel);
   const progressPercentage = isMaxLevel ? 100 : Math.round((xpWithinLevel / XP_PER_LEVEL) * 100);
 
-  // ensure skills (coherence excluded)
   const allSkills = {
-    speaking: skills.speaking ?? 0,
-    writing: skills.writing ?? 0,
-    vocabulary: skills.vocabulary ?? 0,
-    grammar: skills.grammar ?? 0,
-    listening: skills.listening ?? 0,
+    speaking: skills?.speaking ?? 0,
+    writing: skills?.writing ?? 0,
+    vocabulary: skills?.vocabulary ?? 0,
+    grammar: skills?.grammar ?? 0,
+    listening: skills?.listening ?? 0,
   };
 
   return (
     <View style={[styles.screen, { paddingTop: Math.max(insets.top, 10) }]}>
-      {/* Drawer Modal (sin cambios) */}
+      {/* Drawer */}
       <Modal
         animationType="fade"
         transparent
@@ -128,7 +127,7 @@ export default function HomeScreen({ navigation }) {
           <SafeAreaView edges={['top', 'right', 'bottom']} style={[styles.drawerSafeArea, { paddingTop: Math.max(18, insets.top + 12) }]}>
             <View style={styles.drawerContent}>
               <TouchableOpacity style={styles.drawerCloseBtn} onPress={() => setIsMenuVisible(false)}>
-                <Icon name="close" size={28} color={GlobalStyles.textColor.color} />
+                <Icon name="close" size={28} color={GlobalStyles?.textColor?.color || '#222'} />
               </TouchableOpacity>
 
               <View style={styles.drawerHeader}>
@@ -143,13 +142,13 @@ export default function HomeScreen({ navigation }) {
 
               <View style={styles.drawerBody}>
                 <TouchableOpacity onPress={handleSettings} style={styles.drawerItem}>
-                  <Icon name="cog-outline" size={24} color={GlobalStyles.textColor.color} />
-                  <Text style={styles.drawerText}>Configuración</Text>
+                  <Icon name="cog-outline" size={24} color={GlobalStyles?.textColor?.color || '#222'} />
+                  <Text style={styles.drawerText}>Acerca de KeIA</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity onPress={handleLogout} style={styles.drawerItem}>
-                  <Icon name="logout" size={24} color={GlobalStyles.errorColor.color} />
-                  <Text style={[styles.drawerText, { color: GlobalStyles.errorColor.color }]}>Cerrar Sesión</Text>
+                  <Icon name="logout" size={24} color={GlobalStyles?.errorColor?.color || '#FF4B4B'} />
+                  <Text style={[styles.drawerText, { color: GlobalStyles?.errorColor?.color || '#FF4B4B' }]}>Cerrar Sesión</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -159,7 +158,7 @@ export default function HomeScreen({ navigation }) {
 
       <SafeAreaView style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-          {/* Header (sin cambios) */}
+          {/* Header */}
           <View style={[styles.header, { paddingTop: Math.max(6, insets.top / 2) }]}>
             <View style={styles.headerLeft}>
               <View style={styles.avatar}>
@@ -169,24 +168,24 @@ export default function HomeScreen({ navigation }) {
                 <Text style={styles.headerHi}>¡Hola, {displayName}!</Text>
                 <View style={styles.stats}>
                   <View style={styles.badge}>
-                    <Icon name="star" size={14} color={GlobalStyles.accentColor.color || '#FFD700'} />
+                    <Icon name="star" size={14} color={GlobalStyles?.accentColor?.color || '#FFD700'} />
                     <Text style={styles.badgeText}>{currentLabel}</Text>
                   </View>
 
-                  <View style={[styles.badge, { marginLeft: 10, backgroundColor: '#FFF4F2', borderColor: GlobalStyles.errorColor.color }]}>
-                    <Icon name="fire" size={14} color={GlobalStyles.errorColor.color || '#FF4B4B'} />
-                    <Text style={[styles.badgeText, { color: GlobalStyles.errorColor.color }]}>{streak}</Text>
+                  <View style={[styles.badge, { marginLeft: 10, backgroundColor: '#FFF4F2', borderColor: GlobalStyles?.errorColor?.color || '#FFD7D2' }]}>
+                    <Icon name="fire" size={14} color={GlobalStyles?.errorColor?.color || '#FF4B4B'} />
+                    <Text style={[styles.badgeText, { color: GlobalStyles?.errorColor?.color || '#FF4B4B' }]}>{streak}</Text>
                   </View>
                 </View>
               </View>
             </View>
 
             <TouchableOpacity onPress={() => setIsMenuVisible(true)} style={styles.menuBtn}>
-              <Icon name="dots-vertical" size={28} color={GlobalStyles.textColor.color} />
+              <Icon name="dots-vertical" size={28} color={GlobalStyles?.textColor?.color || '#222'} />
             </TouchableOpacity>
           </View>
 
-          {/* Progress Row (sin cambios) */}
+          {/* Progress Row */}
           <View style={styles.levelRow}>
             <Text style={styles.levelRowText}>{currentLabel} {isMaxLevel ? '' : `→ ${nextLabel}`}</Text>
             <View style={styles.xpPill}>
@@ -201,13 +200,12 @@ export default function HomeScreen({ navigation }) {
 
           <Text style={styles.sectionTitle}>Practica tus Habilidades</Text>
 
-          {/* Cards (one per row) */}
+          {/* Cards */}
           <View style={styles.cardsColumn}>
             {Object.entries(allSkills).map(([skillName, score]) => (
               <TouchableOpacity
                 key={skillName}
                 activeOpacity={0.9}
-                // --- CAMBIO AQUÍ: Usamos la nueva función de navegación ---
                 onPress={() => handleNavigateToSkill(skillName, levelNumber)}
                 style={[styles.cardRow, { borderColor: skillColors[skillName] ?? '#DDD' }]}
               >
@@ -240,7 +238,7 @@ export default function HomeScreen({ navigation }) {
             ))}
           </View>
 
-          {/* Level Test button (sin cambios) */}
+          {/* Level Test button */}
           <TouchableOpacity onPress={() => handleNavigateToSkill('levelTest', levelNumber)} style={styles.levelButton}>
             <View style={styles.levelButtonContent}>
               <Icon name="medal" size={18} color="#fff" />
@@ -256,7 +254,7 @@ export default function HomeScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: GlobalStyles.backgroundLight || '#FBFCFF' },
+  screen: { flex: 1, backgroundColor: GlobalStyles?.backgroundLight?.color || '#FBFCFF' },
   container: { padding: CARD_HORIZONTAL_PADDING, alignItems: 'center' },
 
   header: {
@@ -269,20 +267,20 @@ const styles = StyleSheet.create({
   headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   avatar: {
     width: 56, height: 56, borderRadius: 28,
-    backgroundColor: GlobalStyles.secondaryColor?.color || '#1CB0F6',
+    backgroundColor: GlobalStyles?.secondaryColor?.color || '#1CB0F6',
     justifyContent: 'center', alignItems: 'center',
     marginRight: 12,
-    ...GlobalStyles.shadow
+    ...GlobalStyles?.shadow
   },
   avatarText: { fontSize: 22, color: '#fff', fontWeight: '800' },
-  headerHi: { fontSize: 20, fontWeight: '800', color: GlobalStyles.textColor.color || '#222' },
+  headerHi: { fontSize: 20, fontWeight: '800', color: GlobalStyles?.textColor?.color || '#222' },
   stats: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
   badge: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#F3F8FF', paddingHorizontal: 8, paddingVertical: 6, borderRadius: 16,
     borderWidth: 0, alignSelf: 'flex-start'
   },
-  badgeText: { marginLeft: 6, fontWeight: '800', color: GlobalStyles.textColor.color || '#333' },
+  badgeText: { marginLeft: 6, fontWeight: '800', color: GlobalStyles?.textColor?.color || '#333' },
   menuBtn: { padding: 8, borderRadius: 20 },
 
   levelRow: {
@@ -292,21 +290,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8
   },
-  levelRowText: { fontSize: 16, fontWeight: '800', color: GlobalStyles.textColor.color || '#222' },
+  levelRowText: { fontSize: 16, fontWeight: '800', color: GlobalStyles?.textColor?.color || '#222' },
   xpPill: {
-    backgroundColor: GlobalStyles.lightGray?.color || '#EEE',
+    backgroundColor: GlobalStyles?.lightGray?.color || '#EEE',
     paddingVertical: 6, paddingHorizontal: 10, borderRadius: 12
   },
-  xpPillText: { fontWeight: '800', color: GlobalStyles.textColor.color || '#333' },
+  xpPillText: { fontWeight: '800', color: GlobalStyles?.textColor?.color || '#333' },
 
   progressBar: {
     width: '100%', backgroundColor: '#E7EDF7', height: 18, borderRadius: 50, overflow: 'hidden',
     marginBottom: 18, justifyContent: 'center'
   },
-  progressFill: { backgroundColor: GlobalStyles.primaryColor?.color || '#1CB0F6', height: '100%', borderRadius: 50 },
-  progressText: { position: 'absolute', alignSelf: 'center', fontWeight: '700', color: GlobalStyles.textColor.color || '#333' },
+  progressFill: { backgroundColor: GlobalStyles?.primaryColor?.color || '#1CB0F6', height: '100%', borderRadius: 50 },
+  progressText: { position: 'absolute', alignSelf: 'center', fontWeight: '700', color: GlobalStyles?.textColor?.color || '#333' },
 
-  sectionTitle: { width: '100%', fontSize: 20, fontWeight: '800', marginBottom: 12, color: GlobalStyles.textColor.color || '#222' },
+  sectionTitle: { width: '100%', fontSize: 20, fontWeight: '800', marginBottom: 12, color: GlobalStyles?.textColor?.color || '#222' },
 
   cardsColumn: { width: '100%', marginBottom: 12 },
 
@@ -317,7 +315,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     borderWidth: 3,
     overflow: 'hidden',
-    ...GlobalStyles.shadow
+    ...GlobalStyles?.shadow
   },
   cardRowAccent: {
     position: 'absolute',
@@ -339,11 +337,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center', marginRight: 12
   },
   cardText: { flex: 1, paddingRight: 8 },
-  cardTitle: { fontSize: 20, fontWeight: '900', color: GlobalStyles.textColor.color || '#222' },
-  cardSubtitle: { fontSize: 14, color: GlobalStyles.textLight.color || '#777', marginTop: 6 },
+  cardTitle: { fontSize: 20, fontWeight: '900', color: GlobalStyles?.textColor?.color || '#222' },
+  cardSubtitle: { fontSize: 14, color: GlobalStyles?.textLight?.color || '#777', marginTop: 6 },
 
   cardRight: { alignItems: 'flex-end', justifyContent: 'center' },
-  cardScore: { fontWeight: '800', color: GlobalStyles.textLight.color || '#666', marginBottom: 8 },
+  cardScore: { fontWeight: '800', color: GlobalStyles?.textLight?.color || '#666', marginBottom: 8 },
   goBtn: {
     borderWidth: 1.6, borderRadius: 10, paddingVertical: 6, paddingHorizontal: 10
   },
@@ -351,7 +349,7 @@ const styles = StyleSheet.create({
 
   levelButton: { width: '100%', paddingVertical: 10, marginTop: 4 },
   levelButtonContent: {
-    backgroundColor: GlobalStyles.primaryColor?.color || '#1CB0F6',
+    backgroundColor: GlobalStyles?.primaryColor?.color || '#1CB0F6',
     borderRadius: 12, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', flexDirection: 'row'
   },
   levelButtonText: { color: '#fff', fontWeight: '900', marginLeft: 8, fontSize: 15 },
@@ -362,11 +360,14 @@ const styles = StyleSheet.create({
   drawerContent: { flex: 1, paddingHorizontal: 18 },
   drawerCloseBtn: { alignSelf: 'flex-end', marginBottom: 6, padding: 6 },
   drawerHeader: { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderColor: '#EEE', paddingBottom: 14, marginBottom: 14 },
-  avatarBig: { width: 66, height: 66, borderRadius: 33, backgroundColor: GlobalStyles.secondaryColor?.color || '#1CB0F6', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  avatarBig: { width: 66, height: 66, borderRadius: 33, backgroundColor: GlobalStyles?.secondaryColor?.color || '#1CB0F6', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   avatarBigText: { color: '#fff', fontSize: 28, fontWeight: '900' },
-  drawerName: { fontSize: 18, fontWeight: '900', color: GlobalStyles.textColor.color || '#222' },
-  drawerLevel: { fontSize: 14, color: GlobalStyles.textLight.color || '#777' },
+  drawerName: { fontSize: 18, fontWeight: '900', color: GlobalStyles?.textColor?.color || '#222' },
+  drawerLevel: { fontSize: 14, color: GlobalStyles?.textLight?.color || '#777' },
   drawerBody: { marginTop: 6 },
   drawerItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
-  drawerText: { fontSize: 16, marginLeft: 12, fontWeight: '700', color: GlobalStyles.textColor.color || '#222' },
+  drawerText: { fontSize: 16, marginLeft: 12, fontWeight: '700', color: GlobalStyles?.textColor?.color || '#222' },
+
+  // Fallback container if GlobalStyles.container missing
+  fallbackContainer: { flex: 1, backgroundColor: '#fff' }
 });

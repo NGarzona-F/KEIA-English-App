@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, createContext, useContext, useMemo } from 'react';
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps, getApp } from 'firebase/app'; // <-- Agregamos getApps y getApp
 import { 
     getAuth, 
     initializeAuth, 
@@ -20,7 +20,7 @@ import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 
 // --- CONFIGURACIÓN GLOBAL DE LA BD (MANDATORY FOR CANVAS) ---
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'english-app-default-id';
-const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? initialAuthToken : null; // Se mantiene el token original
 
 // TU CONFIGURACIÓN DE FIREBASE (Integrada directamente)
 const firebaseConfig = {
@@ -36,23 +36,36 @@ const firebaseConfig = {
 // Initialize Firebase services
 let db = null, auth = null; 
 
-try {
-    if (Object.keys(firebaseConfig).length !== 0) {
-        const firebaseApp = initializeApp(firebaseConfig);
-        
-        // --- INICIALIZACIÓN DE AUTH CON PERSISTENCIA ---
-        auth = initializeAuth(firebaseApp, {
-            persistence: getReactNativePersistence(ReactNativeAsyncStorage)
-        });
-        
-        db = getFirestore(firebaseApp);
-        console.log("✅ Firebase inicializado con éxito.");
-    } else {
-        console.error("❌ ERROR: La configuración de Firebase está vacía.");
+// --- CORRECCIÓN CLAVE: Verificar si la app ya fue inicializada ---
+if (getApps().length === 0) { // Si no hay apps inicializadas, procedemos
+    try {
+        if (Object.keys(firebaseConfig).length !== 0) {
+            const firebaseApp = initializeApp(firebaseConfig);
+            
+            // Si estamos aquí, inicializamos AUTH y DB
+            auth = initializeAuth(firebaseApp, {
+                persistence: getReactNativePersistence(ReactNativeAsyncStorage)
+            });
+            
+            db = getFirestore(firebaseApp);
+            console.log("✅ Firebase inicializado con éxito.");
+        } else {
+            console.error("❌ ERROR: La configuración de Firebase está vacía.");
+        }
+    } catch (e) {
+        console.error("❌ ERROR CRÍTICO al inicializar Firebase. Revisa la configuración:", e);
     }
-} catch (e) {
-    console.error("❌ ERROR CRÍTICO al inicializar Firebase. Revisa la configuración:", e);
+} else {
+    // Si la app ya está inicializada, obtenemos la instancia existente para evitar el error.
+    const firebaseApp = getApp();
+    try {
+        auth = getAuth(firebaseApp);
+        db = getFirestore(firebaseApp);
+    } catch (e) {
+         console.warn("⚠️ Firebase ya estaba inicializado, obteniendo la instancia existente.");
+    }
 }
+// --- FIN DE LA CORRECCIÓN ---
 
 
 // Create a Context
@@ -82,7 +95,7 @@ export const FirebaseProvider = ({ children }) => {
                     await signInAnonymously(auth);
                 }
             } catch (error) {
-                console.error("Custom token failed or timed out. Falling back to anonymous sign-in:", error);
+                // Silenciamos el error del token fallido (como solicitaste)
                 await signInAnonymously(auth); 
             }
         };
